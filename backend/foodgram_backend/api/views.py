@@ -23,8 +23,7 @@ from .serializers import (
     AvatarSerializer,
     GetTokenSerializer,
     IngredientsSerializer,
-    RecipesReadSerializer,
-    RecipesWriteSerializer,
+    RecipeSerializer,
     ShortRecipeSerializer,
     SignUpSerializer,
     SubscribedUserSerializer,
@@ -69,6 +68,7 @@ class GetTokenView(TokenObtainPairView):
     """ViewSet для получения токенов."""
 
     serializer_class = GetTokenSerializer
+    http_method_names = ('post',)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -93,7 +93,7 @@ class UserViewSet(ModelViewSet):
     filter_backends = (SearchFilter, OrderingFilter)
     search_fields = ('username',)
     ordering_fields = ('username',)
-    http_method_names = ('get', 'post', 'patch', 'delete', 'head')
+    http_method_names = ('get', 'post', 'put', 'delete')
 
     def perform_create(self, serializer):
         user = serializer.save()
@@ -122,6 +122,7 @@ class MeUserAvatarView(generics.UpdateAPIView, generics.DestroyAPIView):
 
     serializer_class = AvatarSerializer
     permission_classes = (IsAuthenticated,)
+    http_method_names = ('put', 'delete')
 
     def get_object(self):
         return self.request.user
@@ -139,6 +140,7 @@ class MeUserFollowingView(generics.ListAPIView):
 
     serializer_class = SubscribedUserSerializer
     permission_classes = (IsAuthenticated,)
+    http_method_names = ('get',)
 
     def get_queryset(self):
         return self.request.user.is_subscribed.all()
@@ -148,6 +150,7 @@ class FollowingView(APIView):
     """View для работы с подписками."""
 
     permission_classes = (IsAuthenticated,)
+    http_method_names = ('post', 'delete')
 
     def post(self, request, pk):
         user_to_following = get_object_or_404(MyUser, id=pk)
@@ -167,23 +170,20 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     """Вьюсет для обработки запросов к рецептам."""
 
     queryset = Recipes.objects.all()
+    serializer_class = RecipeSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
     pagination_class = PageNumberPagination
     filter_backends = (SearchFilter, OrderingFilter)
     search_fields = ('name',)
     ordering_fields = ('id',)
-
-    def get_serializer_class(self):
-        """
-        Определяем какой сериализатор использовать
-        в зависимости от типа запроса
-        """
-        if self.action in ('list', 'retrieve'):
-            return RecipesReadSerializer
-        return RecipesWriteSerializer
+    http_method_names = ('get', 'post', 'patch', 'delete')
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        return instance
 
     def get_permissions(self):
         if self.action == 'get_link':
@@ -207,7 +207,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для возврата короткой ссылки."""
         recipe = get_object_or_404(Recipes, pk=pk)
         return Response(
-            {'link': f'{settings.BASE_URL}/api/recipes/{recipe.pk}'},
+            {'short-link': f'{settings.BASE_URL}/api/recipes/{recipe.pk}'},
             status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])

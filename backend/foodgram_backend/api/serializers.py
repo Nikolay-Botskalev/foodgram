@@ -128,7 +128,7 @@ class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
         return obj.recipes.count()
 
     def get_recipes(self, obj):
-        return RecipesReadSerializer(
+        return RecipeSerializer(
             obj.recipes.all(), many=True, context=self.context).data
 
     def get_avatar(self, obj):
@@ -258,6 +258,7 @@ class RecipeSerializer(serializers.ModelSerializer):
     is_favorited = serializers.SerializerMethodField(default=False)
     is_in_shopping_cart = serializers.SerializerMethodField(default=False)
     tags = TagsSerializer(many=True, read_only=True)
+    ingredients = serializers.SerializerMethodField()
 
     class Meta:
         """Meta."""
@@ -283,22 +284,10 @@ class RecipeSerializer(serializers.ModelSerializer):
             return user.shopping_cart.filter(id=obj.id).exists()
         return False
 
-
-class RecipesReadSerializer(RecipeSerializer):
-    """Сериализатор для чтения рецептов."""
-
-    ingredients = serializers.SerializerMethodField()
-
     def get_ingredients(self, obj):
         recipe_ingredients = obj.recipeingredients_set.all()
         return [RecipeIngredientSerializer(
             item).data for item in recipe_ingredients]
-
-
-class RecipesWriteSerializer(RecipeSerializer):
-    """Сериализатор для создания/обновления рецептов."""
-
-    ingredients = serializers.SerializerMethodField()
 
     def to_internal_value(self, data):
         tags = data.get('tags')
@@ -320,7 +309,6 @@ class RecipesWriteSerializer(RecipeSerializer):
     def create(self, validated_data):
         tags_data = validated_data.pop('tags')
         ingredients_data = validated_data.pop('ingredients')
-        # print(f'ingredients_data -> {ingredients_data}')
         recipe = Recipes.objects.create(**validated_data)
         recipe.tags.set(tags_data)
         for ingredient_data in ingredients_data:
@@ -334,7 +322,26 @@ class RecipesWriteSerializer(RecipeSerializer):
             )
         return recipe
 
-    def get_ingredients(self, obj):
-        recipe_ingredients = obj.recipeingredients_set.all()
-        return [RecipeIngredientSerializer(
-            item).data for item in recipe_ingredients]
+    def update(self, instance, validated_data):
+        """Обновление рецепта и его ингредиентов."""
+        tags_data = validated_data.pop('tags', None)
+        ingredients_data = validated_data.pop('ingredients', None)
+
+        if tags_data is not None:
+            instance.tags.set(tags_data)
+
+        if ingredients_data is not None:
+            instance.recipeingredients_set.all().delete()
+            for ingredient_data in ingredients_data:
+                ingredient_obj = Ingredients.objects.get(
+                    id=ingredient_data['id']
+                )
+                RecipeIngredients.objects.create(
+                    recipe=instance,
+                    ingredient=ingredient_obj,
+                    amount=ingredient_data['amount']
+                )
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        return instance
