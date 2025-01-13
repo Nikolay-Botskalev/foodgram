@@ -165,7 +165,8 @@ class SubscribedUserSerializer(ValidateUsernameMixin, BaseUserSerializer):
     class Meta:
 
         model = MyUser
-        fields = ('id', 'username', 'email', 'first_name', 'last_name','avatar', 'is_subscribed', 'recipes', 'recipes_count')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name',
+                  'avatar', 'is_subscribed', 'recipes', 'recipes_count')
 
 
 class Base64Image(serializers.ImageField):
@@ -297,7 +298,7 @@ class RecipesReadSerializer(RecipeSerializer):
 class RecipesWriteSerializer(RecipeSerializer):
     """Сериализатор для создания/обновления рецептов."""
 
-    ingredients = RecipeIngredientSerializer(many=True)
+    ingredients = serializers.SerializerMethodField()
 
     def to_internal_value(self, data):
         tags = data.get('tags')
@@ -319,7 +320,7 @@ class RecipesWriteSerializer(RecipeSerializer):
     def create(self, validated_data):
         tags_data = validated_data.pop('tags')
         ingredients_data = validated_data.pop('ingredients')
-        print(f'ingredients_data -> {ingredients_data}')
+        # print(f'ingredients_data -> {ingredients_data}')
         recipe = Recipes.objects.create(**validated_data)
         recipe.tags.set(tags_data)
         for ingredient_data in ingredients_data:
@@ -332,3 +333,8 @@ class RecipesWriteSerializer(RecipeSerializer):
                 amount=ingredient_data['amount']
             )
         return recipe
+
+    def get_ingredients(self, obj):
+        recipe_ingredients = obj.recipeingredients_set.all()
+        return [RecipeIngredientSerializer(
+            item).data for item in recipe_ingredients]
