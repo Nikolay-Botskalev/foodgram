@@ -4,35 +4,36 @@ import base64
 from smtplib import SMTPException
 from random import randint
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework_simplejwt.tokens import AccessToken
-from rest_framework.exceptions import ValidationError
 
 from recipes.models import (
-    Ingredients, Recipes, MyUser, Tags, RecipeIngredients)
-
-
-EMAIL_SUBJECT = 'Код для получения токена авторизации'
-EMAIL_SOURCE = 'serzh.mironov1990.mironov@mail.ru'
-EMAIL_ERROR = 'Произошла следующая ошибка при попытке отправки письма:\n'
-
-
-class ValidateUsernameMixin:
-    """Миксин, запрещающий пользователю создать username "me"."""
-
-    def validate_username(self, value):
-        if value.lower() == 'me':
-            raise serializers.ValidationError(
-                'Используйте другой username.'
-            )
-        return value
+    Ingredients, RecipeIngredients, Recipes, MyUser, Tags)
+from .mixins import ValidateUsernameMixin
 
 
 class BaseUserSerializer(serializers.ModelSerializer):
+
+    avatar = serializers.SerializerMethodField()
+    is_subscribed = serializers.SerializerMethodField(default=False)
+
+    def get_avatar(self, obj):
+        if obj.avatar:
+            return self.context.get(
+                'request').build_absolute_uri(obj.avatar.url)
+        return None
+
+    def get_recipes(self, obj):
+        return ShortRecipeSerializer(
+            obj.recipes.all(), many=True, context=self.context).data
+
+    def get_recipes_count(self, obj):
+        return obj.recipes.count()
 
     class Meta:
         model = MyUser
@@ -84,15 +85,22 @@ class SignUpSerializer(ValidateUsernameMixin, serializers.ModelSerializer):
         message = f'Код для получения токена - {confirmation_code}'
         try:
             send_mail(
-                EMAIL_SUBJECT,
+                settings.EMAIL_SUBJECT,
                 message,
-                EMAIL_SOURCE,
+                settings.EMAIL_HOST_USER,
                 (recipient_email,),
                 fail_silently=True
             )
         except SMTPException as error:
-            raise APIException(EMAIL_ERROR + error)
+            raise APIException(settings.EMAIL_ERROR + error)
         return confirmation_code
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    """Сериализатор для смены пароля."""
+
+    new_password = serializers.CharField(required=True)
+    current_password = serializers.CharField(required=True)
 
 
 class GetTokenSerializer(serializers.Serializer):
@@ -112,9 +120,6 @@ class GetTokenSerializer(serializers.Serializer):
 class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
     """Позволяет пользователю взаимодействовать со своими данными."""
 
-    is_subscribed = serializers.SerializerMethodField(default=False)
-    avatar = serializers.SerializerMethodField()
-
     def get_is_subscribed(self, obj):
         user = self.context.get('request').user
         if user.is_anonymous:
@@ -124,45 +129,18 @@ class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
         except AttributeError:
             return False
 
-    def get_recipes_count(self, obj):
-        return obj.recipes.count()
-
-    def get_recipes(self, obj):
-        return RecipeSerializer(
-            obj.recipes.all(), many=True, context=self.context).data
-
-    def get_avatar(self, obj):
-        if obj.avatar:
-            return self.context.get(
-                'request').build_absolute_uri(obj.avatar.url)
-        return None
-
 
 class SubscribedUserSerializer(ValidateUsernameMixin, BaseUserSerializer):
     """Сериализатор для вывода информации о подписках."""
 
-    is_subscribed = serializers.SerializerMethodField(default=True)
     recipes = serializers.SerializerMethodField()
     recipes_count = serializers.SerializerMethodField()
-    avatar = serializers.SerializerMethodField()
 
     def get_is_subscribed(self, obj):
         return True
 
-    def get_recipes(self, obj):
-        return ShortRecipeSerializer(
-            obj.recipes.all(), many=True, context=self.context).data
-
-    def get_recipes_count(self, obj):
-        return obj.recipes.count()
-
-    def get_avatar(self, obj):
-        if obj.avatar:
-            return self.context.get('request').build_absolute_uri(
-                obj.avatar.url)
-        return None
-
     class Meta:
+        """Meta."""
 
         model = MyUser
         fields = ('id', 'username', 'email', 'first_name', 'last_name',
@@ -270,7 +248,6 @@ class RecipeSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'id', 'is_favorited', 'is_in_shopping_cart', 'author')
-        unique_together = ['name', 'author', 'text']
 
     def get_is_favorited(self, obj):
         user = self.context.get('request').user

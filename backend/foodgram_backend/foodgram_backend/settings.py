@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 # from django.core.management.utils import get_random_secret_key
+from django.core.management.utils import get_random_secret_key
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_URL = 'my-foodgram-yp'
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$co$y8%v_5qb**i!y@#n8oy61qdn*-sj1v#taln^jpp)k8nbh4'
+SECRET_KEY = os.getenv('SECRET_KEY', get_random_secret_key())
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -24,6 +25,8 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+EMAIL_SUBJECT = 'Код для получения токена авторизации'
+EMAIL_ERROR = 'Произошла следующая ошибка при попытке отправки письма:\n'
 
 
 # Application definition
@@ -73,6 +76,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'foodgram_backend.wsgi.application'
 
+PRODUCTION = False
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -114,7 +119,7 @@ AUTH_USER_MODEL = "recipes.MyUser"
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-EMAIL_FILE_PATH = BASE_DIR / 'emails/' # Для отработки
+EMAIL_FILE_PATH = BASE_DIR / 'emails/'  # Для отработки
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

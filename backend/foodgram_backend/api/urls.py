@@ -11,6 +11,7 @@ from .views import (
     MeUserAvatarView,
     MeUserFollowingView,
     ReciepesViewSet,
+    SetPasswordView,
     SignUpViewSet,
     TagsViewSet,
     UserViewSet,
@@ -38,6 +39,8 @@ urlpatterns = [
     path('users/me/', MeUserView.as_view(), name='me_user'),
 
     path('users/me/avatar/', MeUserAvatarView.as_view(), name='me_avatar'),
+
+    path('users/set_password/', SetPasswordView.as_view(), name='setpasword'),
 
     path('users/subscriptions/',
          MeUserFollowingView.as_view(),

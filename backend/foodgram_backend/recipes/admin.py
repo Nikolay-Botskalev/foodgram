@@ -26,9 +26,14 @@ class IngredientsAdmin(admin.ModelAdmin):
 class RecipesAdmin(admin.ModelAdmin):
     """Класс для модели рецептов."""
 
-    list_display = ('id', 'name', 'author')
-    search_fields = ('author', 'name')
+    list_display = ('id', 'name', 'author', 'favorite_count')
+    search_fields = ('author__username', 'name', 'tags__name')
     list_filter = ('tags',)
+
+    @admin.display(description="Добавлений в избранное")
+    def favorite_count(self, obj):
+        """Отображение числа добавлений рецепта в избранное."""
+        return obj.favorites.count()
 
 
 @admin.register(Tags)

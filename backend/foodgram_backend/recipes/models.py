@@ -1,8 +1,9 @@
 """Описание моделей."""
 
-from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils import timezone
 
 
 class MyUser(AbstractUser):
@@ -58,6 +59,7 @@ class Recipes(models.Model):
         related_name='recipes',
         verbose_name='Автор'
     )
+    pub_date = models.DateTimeField('Дата добавления', auto_now_add=True)
 
     def __str__(self):
         """Вывод названия при обращении."""
@@ -68,6 +70,13 @@ class Recipes(models.Model):
 
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
+        ordering = ['-pub_date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'text', 'author'],
+                name='unique_recipe'
+            )
+        ]
 
 
 class Ingredients(models.Model):

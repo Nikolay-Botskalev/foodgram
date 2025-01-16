@@ -13,12 +13,3 @@ class IsAuthorOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return obj.author == request.user
-
-
-class AdminOnly(BasePermission):
-    """
-    Доступ только у администратора.
-    """
-
-    def has_permission(self, request, view, obj):
-        return request.user and request.user.is_staff

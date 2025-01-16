@@ -1,23 +1,24 @@
 """Вьюсеты."""
 
 from django.conf import settings
+from django.contrib.auth import authenticate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.mixins import (CreateModelMixin,)
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from recipes.models import (
-    Ingredients, MyUser, Recipes, Tags, RecipeIngredients)
+    Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
 from .permissions import IsAuthorOrReadOnly
 from .serializers import (
     AvatarSerializer,
@@ -64,6 +65,32 @@ class SignUpViewSet(CreateModelMixin, GenericViewSet):
         )
 
 
+class SetPasswordView(APIView):
+    """ViewSet для смены пароля пользователем."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        """Изменение пароля пользователя."""
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        if not new_password or not current_password:
+            return Response(
+                {'error': 'Заполнены не все обязательные поля.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        if not authenticate(username=user.username, password=current_password):
+            return Response(
+                {'error': 'Неверный текущий пароль.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(new_password)
+        user.save()
+        return Response(
+            {'message': 'Пароль успешно изменен.'}, status=status.HTTP_200_OK)
+
+
 class GetTokenView(TokenObtainPairView):
     """ViewSet для получения токенов."""
 
@@ -84,16 +111,25 @@ class GetTokenView(TokenObtainPairView):
 
 
 class UserViewSet(ModelViewSet):
-    """View для управления пользователями администраторами."""
+    """View для запросов к пользователям."""
 
     queryset = MyUser.objects.all()
     serializer_class = UserSerializer
     permission_classes = (IsAuthenticated,)
     pagination_class = PageNumberPagination
     filter_backends = (SearchFilter, OrderingFilter)
-    search_fields = ('username',)
+    search_fields = ('recipes__tags__slug', 'username',)
     ordering_fields = ('username',)
     http_method_names = ('get', 'post', 'put', 'delete')
+
+    @action(detail=True, methods=['get'])
+    def recipes(self, request, pk=None):
+        """Получение списка рецептов пользователя."""
+        user = self.get_object()
+        queryset = Recipes.objects.filter(author=user).order_by('-pub_date')
+        queryset = self.filter_queryset(queryset)
+        serializer = ShortRecipeSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         user = serializer.save()
@@ -174,7 +210,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
     pagination_class = PageNumberPagination
     filter_backends = (SearchFilter, OrderingFilter)
-    search_fields = ('name',)
+    search_fields = ('tags__slug', 'name',)
     ordering_fields = ('id',)
     http_method_names = ('get', 'post', 'patch', 'delete')
 
@@ -228,7 +264,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         user = request.user
         user.shopping_cart.remove(recipe)
         return Response(
-            {'message': 'Рецепт успешно удален из списка покупок'},
+            {'message': f'Рецепт {recipe.name!r} успешно удален из покупок'},
             status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'])
@@ -255,12 +291,21 @@ class ReciepesViewSet(viewsets.ModelViewSet):
                         'measurement_unit': measurement_unit
                     }
         shopping_cart_text = '\n'.join(
-            f'{name} - {data["amount"]} {data["measurement_unit"]}.'
-            for name, data in counting_dict.items()
-        )
+            f"{name.capitalize()} - {data['amount']}\
+ {data['measurement_unit']}."
+            for name, data in counting_dict.items())
         response = HttpResponse(shopping_cart_text, content_type='text/plain')
         response['Content-Disposition'] = 'attachment; filename="cart.pdf"'
         return response
+
+    @action(detail=False, methods=['get'])
+    def favorites(self, request):
+        """Метод для получения списка избранного."""
+        user = self.request.user
+        queryset = user.favorites.all()
+        queryset = self.filter_queryset(queryset)
+        serializer = ShortRecipeSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_to_favorite(self, request, pk=None):
@@ -278,7 +323,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         user = request.user
         user.favorites.remove(recipe)
         return Response(
-            {'message': 'Рецепт удален из списка избранного'},
+            {'message': f'Рецепт {recipe.name!r} удален из списка избранного'},
             status=status.HTTP_200_OK)
 
 
