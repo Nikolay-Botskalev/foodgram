@@ -6,7 +6,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     IngredientsViewSet,
     FollowingView,
-    GetTokenView,
+    LoginView,
+    LogoutView,
     MeUserView,
     MeUserAvatarView,
     MeUserFollowingView,
@@ -22,25 +23,22 @@ app_name = 'api'
 
 router = DefaultRouter()
 
-# Запросы к рецептам (список, создание, получение, обновление, удаление)
 router.register(r'recipes', ReciepesViewSet)
-router.register(r'ingredients', IngredientsViewSet)  # Запросы к ингредиентам
-router.register(r'tags', TagsViewSet)  # Запросы к тегам
+router.register(r'ingredients', IngredientsViewSet)
+router.register(r'tags', TagsViewSet)
 router.register(r'auth/signup', SignUpViewSet)
-router.register(r'users', UserViewSet, basename='admin_users')
+router.register(r'users', UserViewSet, basename='base_users')
 
 urlpatterns = [
-    path('auth/', include('djoser.urls')),
+    path('auth/token/login/', LoginView.as_view(), name='login'),
 
-    path('auth/', include('djoser.urls.jwt')),
-
-    path('auth/token/login/', GetTokenView.as_view()),
+    path('auth/token/logout/', LogoutView.as_view(), name='logout'),
 
     path('users/me/', MeUserView.as_view(), name='me_user'),
 
     path('users/me/avatar/', MeUserAvatarView.as_view(), name='me_avatar'),
 
-    path('users/set_password/', SetPasswordView.as_view(), name='setpasword'),
+    path('users/set_password/', SetPasswordView.as_view(), name='set_pass'),
 
     path('users/subscriptions/',
          MeUserFollowingView.as_view(),

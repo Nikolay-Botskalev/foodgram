@@ -5,7 +5,7 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 class IsAuthorOrReadOnly(BasePermission):
     """
-    Кастомное ограничение. Если запрос от автора - полный доступ.
+    Кастомное ограничение. Если запрос от владельца - полный доступ.
     Иначе - только безопасные методы.
     """
 

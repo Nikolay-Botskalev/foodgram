@@ -1,16 +1,10 @@
 """Сериализаторы."""
 
 import base64
-from smtplib import SMTPException
-from random import randint
 
-from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.mail import send_mail
-from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.exceptions import APIException, ValidationError
-from rest_framework_simplejwt.tokens import AccessToken
 
 from recipes.models import (
     Ingredients, RecipeIngredients, Recipes, MyUser, Tags)
@@ -23,10 +17,8 @@ class BaseUserSerializer(serializers.ModelSerializer):
     is_subscribed = serializers.SerializerMethodField(default=False)
 
     def get_avatar(self, obj):
-        if obj.avatar:
-            return self.context.get(
-                'request').build_absolute_uri(obj.avatar.url)
-        return None
+        return self.context['request'].build_absolute_uri(
+            obj.avatar.url) if obj.avatar else None
 
     def get_recipes(self, obj):
         return ShortRecipeSerializer(
@@ -56,7 +48,8 @@ class SignUpSerializer(ValidateUsernameMixin, serializers.ModelSerializer):
         email = validated_data['email']
         first_name = validated_data['first_name']
         last_name = validated_data['last_name']
-        # получаем кортеж с юзером и bool значением (создано/не создано)
+        password = validated_data['password']
+
         user, created = MyUser.objects.get_or_create(
             username=username,
             email=email,
@@ -66,34 +59,9 @@ class SignUpSerializer(ValidateUsernameMixin, serializers.ModelSerializer):
         if not created:
             raise APIException("Пользователь с такими данными существует.")
 
-        confirmation_code = self.send_code(email)
-        user.confirmation_code = confirmation_code
-        user.set_unusable_password()
+        user.set_password(password)
         user.save()
         return user
-
-    def update(self, instance, validated_data):
-        """Метод создаёт пользователю новый код."""
-        confirmation_code = self.send_code(validated_data.get('email'))
-        instance.confirmation_code = confirmation_code
-        instance.save()
-        return instance
-
-    def send_code(self, recipient_email):
-        """Отправка письма с кодом подтверждения."""
-        confirmation_code = randint(100000, 999999)
-        message = f'Код для получения токена - {confirmation_code}'
-        try:
-            send_mail(
-                settings.EMAIL_SUBJECT,
-                message,
-                settings.EMAIL_HOST_USER,
-                (recipient_email,),
-                fail_silently=True
-            )
-        except SMTPException as error:
-            raise APIException(settings.EMAIL_ERROR + error)
-        return confirmation_code
 
 
 class SetPasswordSerializer(serializers.Serializer):
@@ -103,18 +71,11 @@ class SetPasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(required=True)
 
 
-class GetTokenSerializer(serializers.Serializer):
-    """Сериализатор для получения пользователем токена."""
+class LoginSerializer(serializers.Serializer):
+    """Сериализатор для получения токена."""
 
-    username = serializers.CharField(write_only=True)
-    confirmation_code = serializers.IntegerField(write_only=True)
-
-    def validate(self, data):
-        user = get_object_or_404(MyUser, username=data['username'])
-        if data['confirmation_code'] != user.confirmation_code:
-            raise serializers.ValidationError('Неверный код подтверждения')
-        data['token'] = str(AccessToken.for_user(user))
-        return data
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True)
 
 
 class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
@@ -203,7 +164,7 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='ingredient.name', read_only=True)
     measurement_unit = serializers.CharField(
         source='ingredient.measurement_unit', read_only=True)
-    id = serializers.IntegerField(source='ingredient.id', read_only=True)
+    # id = serializers.IntegerField(source='ingredient.id', read_only=True)
     amount = serializers.DecimalField(
         max_digits=6, decimal_places=2, required=True)
 

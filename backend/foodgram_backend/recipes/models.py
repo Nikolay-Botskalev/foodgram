@@ -3,7 +3,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils import timezone
 
 
 class MyUser(AbstractUser):
@@ -29,8 +28,10 @@ class MyUser(AbstractUser):
     )
     email = models.EmailField(('email address'), unique=True, max_length=100)
     avatar = models.ImageField('Аватар', blank=True, null=True)
-    confirmation_code = models.PositiveIntegerField(
-        'Код подтверждения', default=000000)
+    refresh_token = models.CharField(max_length=255, blank=True, null=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
 
     class Meta:
         """Meta."""

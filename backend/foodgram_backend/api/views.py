@@ -4,27 +4,28 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+import jwt
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.mixins import (CreateModelMixin,)
+from rest_framework.mixins import CreateModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from recipes.models import (
     Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
-from .permissions import IsAuthorOrReadOnly
-from .serializers import (
+from api.permissions import IsAuthorOrReadOnly
+from api.serializers import (
     AvatarSerializer,
-    GetTokenSerializer,
     IngredientsSerializer,
+    LoginSerializer,
     RecipeSerializer,
+    SetPasswordSerializer,
     ShortRecipeSerializer,
     SignUpSerializer,
     SubscribedUserSerializer,
@@ -34,35 +35,22 @@ from .serializers import (
 
 
 class SignUpViewSet(CreateModelMixin, GenericViewSet):
-    """ViewSet, обслуживающий эндпоинт api/v1/auth/signup/."""
+    """ViewSet, обслуживающий эндпоинт api/auth/signup/."""
 
     queryset = MyUser.objects.all()
     serializer_class = SignUpSerializer
-    permission_classes = (AllowAny,)
 
     def create(self, request, *args, **kwargs):
         """
         Если такого пользователя с заданными username и email
         не существует, то создаем.
-        Если пользователь с заданными username и email
-        существует, то сериализатор обновляет его confirmation_code.
         """
-        try:
-            user = MyUser.objects.get(
-                username=request.data.get('username'),
-                email=request.data.get('email'),
-                first_name=request.data.get('first_name'),
-                last_name=request.data.get('last_name'))
-            serializer = self.get_serializer(user, data=request.data)
-        except MyUser.DoesNotExist:
-            serializer = self.get_serializer(data=request.data)
-
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(
-            serializer.data, status=status.HTTP_200_OK, headers=headers
-        )
+            serializer.data, status=status.HTTP_200_OK, headers=headers)
 
 
 class SetPasswordView(APIView):
@@ -72,42 +60,75 @@ class SetPasswordView(APIView):
 
     def post(self, request):
         """Изменение пароля пользователя."""
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         new_password = request.data.get('new_password')
         current_password = request.data.get('current_password')
-        if not new_password or not current_password:
-            return Response(
-                {'error': 'Заполнены не все обязательные поля.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         user = request.user
-        if not authenticate(username=user.username, password=current_password):
+        if not authenticate(username=user.email, password=current_password):
             return Response(
-                {'error': 'Неверный текущий пароль.'},
+                {'error': 'Неверный текущий пароль'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user.set_password(new_password)
         user.save()
         return Response(
-            {'message': 'Пароль успешно изменен.'}, status=status.HTTP_200_OK)
+            {'message': 'Пароль успешно изменен'}, status=status.HTTP_200_OK)
 
 
-class GetTokenView(TokenObtainPairView):
-    """ViewSet для получения токенов."""
+class LoginView(APIView):
+    """Получение токена."""
 
-    serializer_class = GetTokenSerializer
-    http_method_names = ('post',)
+    permission_classes = (AllowAny,)
 
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        try:
-            serializer.is_valid(raise_exception=True)
-        except TokenError as err:
-            raise InvalidToken(err.args[0])
+    def post(self, request):
+        """Получение токена авторизации по email и паролю."""
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+
+        user = authenticate(username=email, password=password)
+
+        if user is None:
+            return Response(
+                {'error': 'Неверный email или пароль'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        user.refresh_token = str(refresh)
+        user.save()
         return Response(
-            {'token': serializer.validated_data['token']},
-            status=status.HTTP_200_OK
-        )
+            {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            },
+            status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    """Удаление токена."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        """Завершение сессии пользователя."""
+        try:
+            user = request.user
+            if not user.refresh_token:
+                return Response(
+                    {'error': 'Недействительный refresh токен'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            RefreshToken(user.refresh_token).blacklist()
+            user.refresh_token = None
+            user.save()
+            return Response({'message': 'Вы успешно вышли из системы'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {'error': f'Произошла ошибка при выходе: {e}'},
+                status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserViewSet(ModelViewSet):
@@ -249,12 +270,11 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def add_to_shopping_cart(self, request, pk=None):
         """Метод для добавления рецепта в список покупок."""
-        print(request)
         recipe = self.get_object()
         user = request.user
         user.shopping_cart.add(recipe)
         return Response(
-            {'message': 'Рецепт успешно добавлен в список покупок'},
+            {'message': f'Рецепт {recipe.name!r} добавлен в список покупок'},
             status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['delete'])
