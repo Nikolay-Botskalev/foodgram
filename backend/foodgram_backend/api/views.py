@@ -4,18 +4,16 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-import jwt
 from rest_framework import generics, status, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.mixins import CreateModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-from rest_framework.viewsets import GenericViewSet, ModelViewSet
+from rest_framework.viewsets import ModelViewSet
 
 from recipes.models import (
     Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
@@ -27,30 +25,10 @@ from api.serializers import (
     RecipeSerializer,
     SetPasswordSerializer,
     ShortRecipeSerializer,
-    SignUpSerializer,
     SubscribedUserSerializer,
     TagsSerializer,
     UserSerializer,
 )
-
-
-class SignUpViewSet(CreateModelMixin, GenericViewSet):
-    """ViewSet, обслуживающий эндпоинт api/auth/signup/."""
-
-    queryset = MyUser.objects.all()
-    serializer_class = SignUpSerializer
-
-    def create(self, request, *args, **kwargs):
-        """
-        Если такого пользователя с заданными username и email
-        не существует, то создаем.
-        """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(
-            serializer.data, status=status.HTTP_200_OK, headers=headers)
 
 
 class SetPasswordView(APIView):
@@ -97,15 +75,14 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        refresh = RefreshToken.for_user(user)
-        user.refresh_token = str(refresh)
-        user.save()
-        return Response(
-            {
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-            },
-            status=status.HTTP_200_OK)
+        token, created = Token.objects.get_or_create(user=user)
+
+        if not created:
+            return Response({'error': 'Ошибка при создании токена.'},
+                            status=status.HTTP_400_BAD_REQUEST,)
+        return Response({
+            'auth_token': token.key
+        })
 
 
 class LogoutView(APIView):
@@ -115,20 +92,10 @@ class LogoutView(APIView):
 
     def post(self, request):
         """Завершение сессии пользователя."""
-        try:
-            user = request.user
-            if not user.refresh_token:
-                return Response(
-                    {'error': 'Недействительный refresh токен'},
-                    status=status.HTTP_400_BAD_REQUEST)
-            RefreshToken(user.refresh_token).blacklist()
-            user.refresh_token = None
-            user.save()
-            return Response({'message': 'Вы успешно вышли из системы'}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response(
-                {'error': f'Произошла ошибка при выходе: {e}'},
-                status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        Token.objects.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(ModelViewSet):
@@ -136,12 +103,21 @@ class UserViewSet(ModelViewSet):
 
     queryset = MyUser.objects.all()
     serializer_class = UserSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
     pagination_class = PageNumberPagination
     filter_backends = (SearchFilter, OrderingFilter)
     search_fields = ('recipes__tags__slug', 'username',)
     ordering_fields = ('username',)
     http_method_names = ('get', 'post', 'put', 'delete')
+
+    def create(self, request, *args, **kwargs):
+        """Создание пользователя."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=['get'])
     def recipes(self, request, pk=None):
@@ -154,7 +130,7 @@ class UserViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         user = serializer.save()
-        user.set_unusable_password()
+        user.set_password(serializer.validated_data['password'])
         user.save()
 
     def get_object(self):
@@ -243,7 +219,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         return instance
 
     def get_permissions(self):
-        if self.action == 'get_link':
+        if self.action == 'get_link' or self.action == 'get':
             permission_classes = (AllowAny,)
         elif self.action in (
             'add_to_shopping_cart',

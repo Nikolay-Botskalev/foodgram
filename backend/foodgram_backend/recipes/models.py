@@ -28,7 +28,6 @@ class MyUser(AbstractUser):
     )
     email = models.EmailField(('email address'), unique=True, max_length=100)
     avatar = models.ImageField('Аватар', blank=True, null=True)
-    refresh_token = models.CharField(max_length=255, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']

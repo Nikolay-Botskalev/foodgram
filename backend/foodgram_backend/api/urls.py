@@ -13,7 +13,6 @@ from .views import (
     MeUserFollowingView,
     ReciepesViewSet,
     SetPasswordView,
-    SignUpViewSet,
     TagsViewSet,
     UserViewSet,
 )
@@ -26,8 +25,7 @@ router = DefaultRouter()
 router.register(r'recipes', ReciepesViewSet)
 router.register(r'ingredients', IngredientsViewSet)
 router.register(r'tags', TagsViewSet)
-router.register(r'auth/signup', SignUpViewSet)
-router.register(r'users', UserViewSet, basename='base_users')
+router.register(r'users', UserViewSet, basename='users')
 
 urlpatterns = [
     path('auth/token/login/', LoginView.as_view(), name='login'),

@@ -2,13 +2,14 @@
 
 import base64
 
+from django.contrib.auth import password_validation
 from django.core.files.base import ContentFile
 from rest_framework import serializers
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import ValidationError
 
 from recipes.models import (
     Ingredients, RecipeIngredients, Recipes, MyUser, Tags)
-from .mixins import ValidateUsernameMixin
+from api.mixins import ValidateUsernameMixin
 
 
 class BaseUserSerializer(serializers.ModelSerializer):
@@ -30,38 +31,9 @@ class BaseUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = MyUser
         fields = ('id', 'username', 'email', 'first_name', 'last_name',
-                  'avatar', 'is_subscribed')
-        read_only_fields = ('password',)
-
-
-class SignUpSerializer(ValidateUsernameMixin, serializers.ModelSerializer):
-    """Сериализатор для эндпоинта api/v1/auth/signup/"""
-
-    class Meta:
-        model = MyUser
-        fields = ('username', 'email', 'first_name', 'last_name', 'password')
-        extra_kwargs = {'password': {'write_only': True}}
-
-    def create(self, validated_data):
-        """Метод создаёт нового пользователя."""
-        username = validated_data['username']
-        email = validated_data['email']
-        first_name = validated_data['first_name']
-        last_name = validated_data['last_name']
-        password = validated_data['password']
-
-        user, created = MyUser.objects.get_or_create(
-            username=username,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        if not created:
-            raise APIException("Пользователь с такими данными существует.")
-
-        user.set_password(password)
-        user.save()
-        return user
+                  'avatar', 'is_subscribed', 'password')
+        read_only_fields = ('id',)
+        extra_kwargs = {"email": {"required": True}}
 
 
 class SetPasswordSerializer(serializers.Serializer):
@@ -81,6 +53,13 @@ class LoginSerializer(serializers.Serializer):
 class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
     """Позволяет пользователю взаимодействовать со своими данными."""
 
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[password_validation.validate_password],
+    )
+    email = serializers.EmailField(required=True)
+
     def get_is_subscribed(self, obj):
         user = self.context.get('request').user
         if user.is_anonymous:
@@ -89,6 +68,11 @@ class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
             return user.following.filter(id=obj.id).exists()
         except AttributeError:
             return False
+
+    def create(self, validated_data):
+        """Метод для создания нового пользователя."""
+        user = MyUser.objects.create(**validated_data)
+        return user
 
 
 class SubscribedUserSerializer(ValidateUsernameMixin, BaseUserSerializer):
