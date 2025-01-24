@@ -4,22 +4,17 @@ from recipes.models import Ingredients
 
 
 class Command(BaseCommand):
-    help = 'Загружает ингредиенты из JSON-файла в базу данных'
-
-    def add_arguments(self, parser):
-        parser.add_argument('file_path', type=str, help="Путь к json файлу")
+    """Команда на добавление ингредиентов в БД."""
 
     def handle(self, *args, **options):
-        file_path = options['file_path']
+        file_path = 'recipes/management/commands/ingredients.json'
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-        except FileNotFoundError:
-            self.stdout.write(self.style.ERROR(f'Файл {file_path} не найден.'))
-            return
         except json.JSONDecodeError:
-            self.stdout.write(self.style.ERROR(f'Ошибка декодирования JSON в файле {file_path}.'))
+            self.stdout.write(self.style.ERROR(
+                f'Ошибка декодирования JSON в файле {file_path!r}.'))
             return
 
         created_count = 0
@@ -34,10 +29,11 @@ class Command(BaseCommand):
                     created_count += 1
                 else:
                     updated_count += 1
-                self.stdout.write(self.style.SUCCESS(
-                    f'Ингредиент {name} создан/обновлен'))
+                self.stdout.write(
+                    self.style.SUCCESS(f'Ингредиент {name} создан/обновлен'))
             else:
                 self.stdout.write(self.style.ERROR(
                     f'Пропущен ингредиент {ingredient_data}'))
             self.stdout.write(self.style.SUCCESS(
-                f'Загрузка завершена. Создано {created_count} новых, обновлено {updated_count}'))
+                f'Загрузка завершена. Создано {created_count} записей, \
+                    обновлено {updated_count} записей.'))

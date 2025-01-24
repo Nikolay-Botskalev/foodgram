@@ -145,10 +145,10 @@ class ShortRecipeSerializer(serializers.ModelSerializer):
 class RecipeIngredientSerializer(serializers.ModelSerializer):
     """Сериализатор вспомогательной модели рецепты-ингредиенты."""
 
+    id = serializers.CharField(source='ingredient.id', read_only=True)
     name = serializers.CharField(source='ingredient.name', read_only=True)
     measurement_unit = serializers.CharField(
         source='ingredient.measurement_unit', read_only=True)
-    # id = serializers.IntegerField(source='ingredient.id', read_only=True)
     amount = serializers.DecimalField(
         max_digits=6, decimal_places=2, required=True)
 
@@ -175,7 +175,7 @@ class TagsSerializer(serializers.ModelSerializer):
 class RecipeSerializer(serializers.ModelSerializer):
     """Общий сериализатор для рецептов."""
 
-    image = Base64Image(required=False, allow_null=True)
+    image = Base64Image(required=True)
     author = UserSerializer(
         read_only=True, default=serializers.CurrentUserDefault())
     is_favorited = serializers.SerializerMethodField(default=False)

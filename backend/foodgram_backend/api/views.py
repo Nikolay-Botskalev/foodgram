@@ -1,13 +1,15 @@
 """Вьюсеты."""
+from hashids import Hashids
 
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from rest_framework import generics, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly)
@@ -15,8 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from recipes.models import (
-    Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
+from api.filters import IngredientFilter
 from api.permissions import IsAuthorOrReadOnly
 from api.serializers import (
     AvatarSerializer,
@@ -29,6 +30,11 @@ from api.serializers import (
     TagsSerializer,
     UserSerializer,
 )
+from recipes.models import (
+    Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
+
+
+hashids = Hashids(min_length=5, salt=settings.SECRET_KEY)
 
 
 class SetPasswordView(APIView):
@@ -75,14 +81,8 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        token, created = Token.objects.get_or_create(user=user)
-
-        if not created:
-            return Response({'error': 'Ошибка при создании токена.'},
-                            status=status.HTTP_400_BAD_REQUEST,)
-        return Response({
-            'auth_token': token.key
-        })
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({'auth_token': token.key})
 
 
 class LogoutView(APIView):
@@ -92,7 +92,6 @@ class LogoutView(APIView):
 
     def post(self, request):
         """Завершение сессии пользователя."""
-
         user = request.user
         Token.objects.filter(user=user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -186,6 +185,7 @@ class FollowingView(APIView):
     http_method_names = ('post', 'delete')
 
     def post(self, request, pk):
+        """Подписка на пользователя."""
         user_to_following = get_object_or_404(MyUser, id=pk)
         request.user.is_subscribed.add(user_to_following)
         serializer = SubscribedUserSerializer(
@@ -193,6 +193,7 @@ class FollowingView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, pk):
+        """Отписка от пользователя."""
         user_to_unsubscribe = get_object_or_404(MyUser, id=pk)
         request.user.is_subscribed.remove(user_to_unsubscribe)
         return Response(
@@ -206,8 +207,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     serializer_class = RecipeSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
     pagination_class = PageNumberPagination
-    filter_backends = (SearchFilter, OrderingFilter)
-    search_fields = ('tags__slug', 'name',)
+    filter_backends = (OrderingFilter,)
     ordering_fields = ('id',)
     http_method_names = ('get', 'post', 'patch', 'delete')
 
@@ -215,33 +215,68 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         serializer.save(author=self.request.user)
 
     def perform_update(self, serializer):
-        instance = serializer.save()
-        return instance
+        serializer.save()
 
     def get_permissions(self):
-        if self.action == 'get_link' or self.action == 'get':
-            permission_classes = (AllowAny,)
-        elif self.action in (
-            'add_to_shopping_cart',
-            'remove_from_shopping_cart',
-            'download_shopping_cart',
-            'add_to_favorite',
-            'remove_from_favorite'
-        ):
-            permission_classes = (IsAuthenticated,)
-        elif self.action in ('update', 'delete'):
-            permission_classes = (IsAuthorOrReadOnly,)
-        else:
-            permission_classes = self.permission_classes
-        return [permission() for permission in permission_classes]
+        """Установка прав доступа."""
+        permission_classes_map = {
+            'get_link': (AllowAny,),
+            'retrieve': (AllowAny,),
+            'list': (AllowAny,),
+            'add_to_shopping_cart': (IsAuthenticated,),
+            'remove_from_shopping_cart': (IsAuthenticated,),
+            'download_shopping_cart': (IsAuthenticated,),
+            'add_to_favorite': (IsAuthenticated,),
+            'remove_from_favorite': (IsAuthenticated,),
+            'update': (IsAuthorOrReadOnly,),
+            'destroy': (IsAuthorOrReadOnly,),
+            'create': (IsAuthenticated,),
+        }
+        return [permission() for permission in permission_classes_map.get(
+            self.action, self.permission_classes)]
 
-    @action(detail=True, methods=['get'])
-    def get_link(self, request, pk=None):
-        """Метод для возврата короткой ссылки."""
-        recipe = get_object_or_404(Recipes, pk=pk)
-        return Response(
-            {'short-link': f'{settings.BASE_URL}/api/recipes/{recipe.pk}'},
-            status=status.HTTP_200_OK)
+    def filter_queryset(self, queryset):
+        is_in_shopping_cart = self.request.query_params.get(
+            'is_in_shopping_cart')
+
+        if is_in_shopping_cart is not None and is_in_shopping_cart == '1':
+            return queryset.filter(shopping_cart=self.request.user)
+
+        return queryset
+
+    def list(self, request):
+        """Фильтрованный вывод рецептов."""
+        queryset = Recipes.objects.all().order_by('-pub_date')
+        queryset = self.filter_queryset(queryset)
+
+        tag_slugs = request.query_params.getlist('tags')
+        author_id = request.query_params.get('author')
+        is_favorited = request.query_params.get('is_favorited')
+
+        if author_id:
+            queryset = queryset.filter(author__id=author_id)
+        if is_favorited:
+            queryset = queryset.filter(favorites=request.user)
+        if tag_slugs:
+            queryset = queryset.filter(tags__slug__in=tag_slugs)
+
+        queryset = queryset.distinct()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def cart(self, request):
+        """Метод для получения списка покупок."""
+        user = self.request.user
+        queryset = user.shopping_cart.all()
+        queryset = self.filter_queryset(queryset)
+        serializer = RecipeSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_to_shopping_cart(self, request, pk=None):
@@ -291,7 +326,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
  {data['measurement_unit']}."
             for name, data in counting_dict.items())
         response = HttpResponse(shopping_cart_text, content_type='text/plain')
-        response['Content-Disposition'] = 'attachment; filename="cart.pdf"'
+        response['Content-Disposition'] = 'attachment; filename="cart.txt"'
         return response
 
     @action(detail=False, methods=['get'])
@@ -300,7 +335,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = user.favorites.all()
         queryset = self.filter_queryset(queryset)
-        serializer = ShortRecipeSerializer(queryset, many=True)
+        serializer = RecipeSerializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
@@ -322,6 +357,27 @@ class ReciepesViewSet(viewsets.ModelViewSet):
             {'message': f'Рецепт {recipe.name!r} удален из списка избранного'},
             status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'])
+    def get_link(self, request, pk=None):
+        """Метод для возврата короткой ссылки."""
+        recipe = get_object_or_404(Recipes, pk=pk)
+        short_id = hashids.encode(recipe.pk)
+        return Response(
+            {'short-link': f'http://127.0.0.1:8000/api/{short_id}'},
+            status=status.HTTP_200_OK)
+
+
+def short_link_redirect(request, string):
+    """Метод для редиректа с короткой ссылки."""
+    try:
+        recipe_id = hashids.decode(string)[0]
+        if not recipe_id:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        recipe = get_object_or_404(Recipes, pk=recipe_id)
+        return redirect(f'/recipes/{recipe.pk}')
+    except (IndexError, ValueError):
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
 
 class IngredientsViewSet(viewsets.ModelViewSet):
     """Вьюсет для обработки запросов к ингредиентам."""
@@ -330,10 +386,9 @@ class IngredientsViewSet(viewsets.ModelViewSet):
     serializer_class = IngredientsSerializer
     permission_classes = (AllowAny,)
     http_method_names = ('get',)
-    pagination_class = PageNumberPagination
-    filter_backends = (SearchFilter, OrderingFilter)
-    search_fields = ('name',)
-    ordering_fields = ('name',)
+    pagination_class = None
+    filter_backends = (DjangoFilterBackend,)
+    filterset_class = IngredientFilter
 
 
 class TagsViewSet(viewsets.ModelViewSet):
@@ -342,7 +397,8 @@ class TagsViewSet(viewsets.ModelViewSet):
     queryset = Tags.objects.all()
     serializer_class = TagsSerializer
     permission_classes = (AllowAny,)
+    pagination_class = None
     filter_backends = (SearchFilter, OrderingFilter)
-    search_fields = ('name',)
-    ordering_fields = ('slug',)
+    search_fields = ('slug',)
+    ordering_fields = ('name',)
     http_method_names = ('get',)

@@ -3,7 +3,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import (
+from api.views import (
     IngredientsViewSet,
     FollowingView,
     LoginView,
@@ -13,6 +13,7 @@ from .views import (
     MeUserFollowingView,
     ReciepesViewSet,
     SetPasswordView,
+    short_link_redirect,
     TagsViewSet,
     UserViewSet,
 )
@@ -55,11 +56,13 @@ urlpatterns = [
     path('recipes/<int:pk>/shopping_cart/', ReciepesViewSet.as_view(
         {'post': 'add_to_shopping_cart',
          'delete': 'remove_from_shopping_cart'}),
-         name='download_shopping_cart'),
+         name='shopping_cart'),
 
     path('recipes/<int:pk>/favorite/', ReciepesViewSet.as_view(
         {'post': 'add_to_favorite', 'delete': 'remove_from_favorite'}),
         name='favorite'),
 
     path('', include(router.urls)),
+
+    path('<str:string>', short_link_redirect, name='short_link_redirect')
 ]

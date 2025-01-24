@@ -43,7 +43,7 @@ class Recipes(models.Model):
     """Класс рецептов."""
 
     name = models.CharField('Название', max_length=256, default='Рецепт')
-    image = models.ImageField('Изображение', blank=True, null=True)
+    image = models.ImageField('Изображение')
     text = models.TextField('Описание', blank=True)
     cooking_time = models.PositiveIntegerField(
         'Время приготовления (мин.)', validators=[MinValueValidator(1)])
@@ -82,7 +82,7 @@ class Recipes(models.Model):
 class Ingredients(models.Model):
     """Класс ингредиентов."""
 
-    name = models.CharField('Название ингредиента', max_length=50, unique=True)
+    name = models.CharField('Название ингредиента', max_length=90, unique=True)
     measurement_unit = models.CharField('Единица измерения', max_length=15)
 
     def __str__(self):
