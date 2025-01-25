@@ -2,14 +2,13 @@
 
 import base64
 
+from api.mixins import ValidateUsernameMixin
 from django.contrib.auth import password_validation
 from django.core.files.base import ContentFile
+from recipes.models import (Ingredients, MyUser, RecipeIngredients, Recipes,
+                            Tags)
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-
-from api.mixins import ValidateUsernameMixin
-from recipes.models import (
-    Ingredients, RecipeIngredients, Recipes, MyUser, Tags)
 
 
 class BaseUserSerializer(serializers.ModelSerializer):
