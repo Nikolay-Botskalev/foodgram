@@ -7,9 +7,9 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
+from api.mixins import ValidateUsernameMixin
 from recipes.models import (
     Ingredients, RecipeIngredients, Recipes, MyUser, Tags)
-from api.mixins import ValidateUsernameMixin
 
 
 class BaseUserSerializer(serializers.ModelSerializer):
@@ -20,6 +20,15 @@ class BaseUserSerializer(serializers.ModelSerializer):
     def get_avatar(self, obj):
         return self.context['request'].build_absolute_uri(
             obj.avatar.url) if obj.avatar else None
+
+    def get_is_subscribed(self, obj):
+        user = self.context.get('request').user
+        if user.is_anonymous:
+            return False
+        try:
+            return user.is_subscribed.filter(id=obj.id).exists()
+        except AttributeError:
+            return False
 
     def get_recipes(self, obj):
         return ShortRecipeSerializer(
@@ -60,29 +69,17 @@ class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
     )
     email = serializers.EmailField(required=True)
 
-    def get_is_subscribed(self, obj):
-        user = self.context.get('request').user
-        if user.is_anonymous:
-            return False
-        try:
-            return user.following.filter(id=obj.id).exists()
-        except AttributeError:
-            return False
-
     def create(self, validated_data):
         """Метод для создания нового пользователя."""
         user = MyUser.objects.create(**validated_data)
         return user
 
 
-class SubscribedUserSerializer(ValidateUsernameMixin, BaseUserSerializer):
+class SubscribedUserSerializer(UserSerializer):
     """Сериализатор для вывода информации о подписках."""
 
     recipes = serializers.SerializerMethodField()
     recipes_count = serializers.SerializerMethodField()
-
-    def get_is_subscribed(self, obj):
-        return True
 
     class Meta:
         """Meta."""
@@ -221,7 +218,7 @@ class RecipeSerializer(serializers.ModelSerializer):
                     Tags.objects.get(pk=tag_id)
                 except Tags.DoesNotExist:
                     raise ValidationError(
-                        {'classes': ['Invalid classes primary key']},
+                        {'classes': ['Тег отсутствует.']},
                         code='invalid',
                     )
         internal_data['tags'] = tags
@@ -229,6 +226,7 @@ class RecipeSerializer(serializers.ModelSerializer):
         return internal_data
 
     def create(self, validated_data):
+        """Создание рецепта."""
         tags_data = validated_data.pop('tags')
         ingredients_data = validated_data.pop('ingredients')
         recipe = Recipes.objects.create(**validated_data)
@@ -245,7 +243,7 @@ class RecipeSerializer(serializers.ModelSerializer):
         return recipe
 
     def update(self, instance, validated_data):
-        """Обновление рецепта и его ингредиентов."""
+        """Обновление рецепта."""
         tags_data = validated_data.pop('tags', None)
         ingredients_data = validated_data.pop('ingredients', None)
 

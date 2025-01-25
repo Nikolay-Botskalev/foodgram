@@ -196,14 +196,13 @@ class FollowingView(APIView):
         """Отписка от пользователя."""
         user_to_unsubscribe = get_object_or_404(MyUser, id=pk)
         request.user.is_subscribed.remove(user_to_unsubscribe)
-        return Response(
-            {'message': 'Отписка'}, status=status.HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ReciepesViewSet(viewsets.ModelViewSet):
     """Вьюсет для обработки запросов к рецептам."""
 
-    queryset = Recipes.objects.all()
+    queryset = Recipes.objects.all().order_by('-pub_date')
     serializer_class = RecipeSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
     pagination_class = PageNumberPagination
@@ -236,12 +235,12 @@ class ReciepesViewSet(viewsets.ModelViewSet):
             self.action, self.permission_classes)]
 
     def filter_queryset(self, queryset):
+        """Фильтрация рецептов по вхождению в список покупок."""
         is_in_shopping_cart = self.request.query_params.get(
             'is_in_shopping_cart')
 
         if is_in_shopping_cart is not None and is_in_shopping_cart == '1':
             return queryset.filter(shopping_cart=self.request.user)
-
         return queryset
 
     def list(self, request):
@@ -274,7 +273,6 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для получения списка покупок."""
         user = self.request.user
         queryset = user.shopping_cart.all()
-        queryset = self.filter_queryset(queryset)
         serializer = RecipeSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -284,9 +282,8 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         recipe = self.get_object()
         user = request.user
         user.shopping_cart.add(recipe)
-        return Response(
-            {'message': f'Рецепт {recipe.name!r} добавлен в список покупок'},
-            status=status.HTTP_201_CREATED)
+        serializer = ShortRecipeSerializer(recipe)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['delete'])
     def remove_from_shopping_cart(self, request, pk=None):
@@ -294,14 +291,11 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         recipe = self.get_object()
         user = request.user
         user.shopping_cart.remove(recipe)
-        return Response(
-            {'message': f'Рецепт {recipe.name!r} успешно удален из покупок'},
-            status=status.HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'])
     def download_shopping_cart(self, request):
         """Метод для скачивания списка покупок."""
-
         user = request.user
         counting_dict = {}
         for recipe in user.shopping_cart.all():
@@ -334,7 +328,6 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для получения списка избранного."""
         user = self.request.user
         queryset = user.favorites.all()
-        queryset = self.filter_queryset(queryset)
         serializer = RecipeSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -353,9 +346,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         recipe = self.get_object()
         user = request.user
         user.favorites.remove(recipe)
-        return Response(
-            {'message': f'Рецепт {recipe.name!r} удален из списка избранного'},
-            status=status.HTTP_200_OK)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'])
     def get_link(self, request, pk=None):
@@ -363,7 +354,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         recipe = get_object_or_404(Recipes, pk=pk)
         short_id = hashids.encode(recipe.pk)
         return Response(
-            {'short-link': f'http://127.0.0.1:8000/api/{short_id}'},
+            {'short-link': f'https://{settings.BASE_URL}/api/{short_id}'},
             status=status.HTTP_200_OK)
 
 
