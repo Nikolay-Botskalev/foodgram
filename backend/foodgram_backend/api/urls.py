@@ -1,23 +1,11 @@
 """Эндпоинты."""
 
+from api.views import (FollowingView, IngredientsViewSet, LoginView,
+                       LogoutView, MeUserAvatarView, MeUserFollowingView,
+                       MeUserView, ReciepesViewSet, SetPasswordView,
+                       TagsViewSet, UserViewSet, short_link_redirect)
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-
-from api.views import (
-    IngredientsViewSet,
-    FollowingView,
-    LoginView,
-    LogoutView,
-    MeUserView,
-    MeUserAvatarView,
-    MeUserFollowingView,
-    ReciepesViewSet,
-    SetPasswordView,
-    short_link_redirect,
-    TagsViewSet,
-    UserViewSet,
-)
-
 
 app_name = 'api'
 

@@ -1,38 +1,29 @@
 """Вьюсеты."""
-from hashids import Hashids
-
+from api.filters import IngredientFilter
+from api.permissions import IsAuthorOrReadOnly
+from api.serializers import (AvatarSerializer, IngredientsSerializer,
+                             LoginSerializer, RecipeSerializer,
+                             SetPasswordSerializer, ShortRecipeSerializer,
+                             SubscribedUserSerializer, TagsSerializer,
+                             UserSerializer)
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
+from django_filters.rest_framework import DjangoFilterBackend
+from hashids import Hashids
+from recipes.models import (Ingredients, MyUser, RecipeIngredients, Recipes,
+                            Tags)
 from rest_framework import generics, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import (
-    AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly)
+from rest_framework.permissions import (AllowAny, IsAuthenticated,
+                                        IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-
-from api.filters import IngredientFilter
-from api.permissions import IsAuthorOrReadOnly
-from api.serializers import (
-    AvatarSerializer,
-    IngredientsSerializer,
-    LoginSerializer,
-    RecipeSerializer,
-    SetPasswordSerializer,
-    ShortRecipeSerializer,
-    SubscribedUserSerializer,
-    TagsSerializer,
-    UserSerializer,
-)
-from recipes.models import (
-    Ingredients, MyUser, RecipeIngredients, Recipes, Tags)
-
 
 hashids = Hashids(min_length=5, salt=settings.SECRET_KEY)
 
