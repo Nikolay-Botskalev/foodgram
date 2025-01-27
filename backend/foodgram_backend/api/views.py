@@ -1,11 +1,12 @@
 """Вьюсеты."""
 from api.filters import IngredientFilter
 from api.permissions import IsAuthorOrReadOnly
-from api.serializers import (AvatarSerializer, IngredientsSerializer,
-                             LoginSerializer, RecipeSerializer,
-                             SetPasswordSerializer, ShortRecipeSerializer,
-                             SubscribedUserSerializer, TagsSerializer,
-                             UserSerializer)
+from api.serializers import (AvatarSerializer, BaseUserSerializer,
+                             IngredientsSerializer, LoginSerializer,
+                             RecipeSerializer, SetPasswordSerializer,
+                             ShortRecipeSerializer, SubscribedUserSerializer,
+                             TagsSerializer, UserCreateSerializer,
+                             UserRegistrationSerializer,)
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
@@ -18,7 +19,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.pagination import PageNumberPagination
+from rest_framework.pagination import (LimitOffsetPagination,)
 from rest_framework.permissions import (AllowAny, IsAuthenticated,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
@@ -26,29 +27,6 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 hashids = Hashids(min_length=5, salt=settings.SECRET_KEY)
-
-
-class SetPasswordView(APIView):
-    """ViewSet для смены пароля пользователем."""
-
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request):
-        """Изменение пароля пользователя."""
-        serializer = SetPasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        new_password = request.data.get('new_password')
-        current_password = request.data.get('current_password')
-        user = request.user
-        if not authenticate(username=user.email, password=current_password):
-            return Response(
-                {'error': 'Неверный текущий пароль'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        user.set_password(new_password)
-        user.save()
-        return Response(
-            {'message': 'Пароль успешно изменен'}, status=status.HTTP_200_OK)
 
 
 class LoginView(APIView):
@@ -82,19 +60,43 @@ class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        """Завершение сессии пользователя."""
+        """Удаление токена."""
         user = request.user
         Token.objects.filter(user=user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SetPasswordView(APIView):
+    """ViewSet для смены пароля пользователем."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        """Изменение пароля пользователя."""
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        user = request.user
+        if not authenticate(username=user.email, password=current_password):
+            return Response(
+                {'error': 'Неверный текущий пароль'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(new_password)
+        user.save()
+        return Response(
+            {'message': 'Пароль успешно изменен'},
+            status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(ModelViewSet):
     """View для запросов к пользователям."""
 
     queryset = MyUser.objects.all()
-    serializer_class = UserSerializer
+    serializer_class = BaseUserSerializer
     permission_classes = (AllowAny,)
-    pagination_class = PageNumberPagination
+    pagination_class = LimitOffsetPagination
     filter_backends = (SearchFilter, OrderingFilter)
     search_fields = ('recipes__tags__slug', 'username',)
     ordering_fields = ('username',)
@@ -102,12 +104,15 @@ class UserViewSet(ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Создание пользователя."""
-        serializer = self.get_serializer(data=request.data)
+        serializer = UserCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
+        response_serializer = UserRegistrationSerializer(serializer.instance)
+        headers = self.get_success_headers(response_serializer.data)
         return Response(
-            serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers)
 
     @action(detail=True, methods=['get'])
     def recipes(self, request, pk=None):
@@ -130,7 +135,7 @@ class UserViewSet(ModelViewSet):
 class MeUserView(generics.RetrieveAPIView, generics.UpdateAPIView):
     """View для просмотра и редактирования пользователем своих данных."""
 
-    serializer_class = UserSerializer
+    serializer_class = BaseUserSerializer
     permission_classes = (IsAuthenticated,)
 
     def get_object(self):
@@ -162,31 +167,57 @@ class MeUserFollowingView(generics.ListAPIView):
     """View для извлечения всех подписок."""
 
     serializer_class = SubscribedUserSerializer
+    pagination_class = LimitOffsetPagination
     permission_classes = (IsAuthenticated,)
     http_method_names = ('get',)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        recipes_limit = self.request.query_params.get('recipes_limit')
+        if recipes_limit:
+            context['recipes_limit'] = recipes_limit
+        return context
 
     def get_queryset(self):
         return self.request.user.is_subscribed.all()
 
 
-class FollowingView(APIView):
+class FollowingView(generics.GenericAPIView):
     """View для работы с подписками."""
 
     permission_classes = (IsAuthenticated,)
-    http_method_names = ('post', 'delete')
+    serializer_class = SubscribedUserSerializer
+    queryset = MyUser.objects.all()
+    lookup_field = 'pk'
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        recipes_limit = self.request.query_params.get('recipes_limit')
+        if recipes_limit:
+            context['recipes_limit'] = recipes_limit
+        return context
 
     def post(self, request, pk):
         """Подписка на пользователя."""
         user_to_following = get_object_or_404(MyUser, id=pk)
+        if request.user == user_to_following:
+            return Response({'errors': 'Нельзя подписаться на себя'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if request.user.is_subscribed.filter(id=user_to_following.id).exists():
+            return Response({'errors': 'Вы уже подписаны на пользователя'},
+                            status=status.HTTP_400_BAD_REQUEST)
         request.user.is_subscribed.add(user_to_following)
-        serializer = SubscribedUserSerializer(
-            user_to_following, context={'request': request})
+        serializer = self.get_serializer(
+            user_to_following, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, pk):
         """Отписка от пользователя."""
-        user_to_unsubscribe = get_object_or_404(MyUser, id=pk)
-        request.user.is_subscribed.remove(user_to_unsubscribe)
+        user_unsub = get_object_or_404(MyUser, id=pk)
+        if not request.user.is_subscribed.filter(id=user_unsub.id).exists():
+            return Response({'errors': 'Вы не подписаны на пользователя'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        request.user.is_subscribed.remove(user_unsub)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -196,8 +227,8 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     queryset = Recipes.objects.all().order_by('-pub_date')
     serializer_class = RecipeSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
-    pagination_class = PageNumberPagination
-    filter_backends = (OrderingFilter,)
+    pagination_class = LimitOffsetPagination
+    filter_backends = (SearchFilter, OrderingFilter)
     ordering_fields = ('id',)
     http_method_names = ('get', 'post', 'patch', 'delete')
 
@@ -226,27 +257,28 @@ class ReciepesViewSet(viewsets.ModelViewSet):
             self.action, self.permission_classes)]
 
     def filter_queryset(self, queryset):
-        """Фильтрация рецептов по вхождению в список покупок."""
+        """Фильтрация рецептов по вхождению в список покупок и избранное"""
         is_in_shopping_cart = self.request.query_params.get(
             'is_in_shopping_cart')
+        is_favorited = self.request.query_params.get('is_favorited')
 
-        if is_in_shopping_cart is not None and is_in_shopping_cart == '1':
-            return queryset.filter(shopping_cart=self.request.user)
+        if self.request.user.is_authenticated:
+            if is_in_shopping_cart and is_in_shopping_cart == '1':
+                queryset = queryset.filter(
+                    shopping_cart__id=self.request.user.id)
+            if is_favorited and is_favorited == '1':
+                queryset = queryset.filter(
+                    favorites__id=self.request.user.id)
         return queryset
 
     def list(self, request):
         """Фильтрованный вывод рецептов."""
-        queryset = Recipes.objects.all().order_by('-pub_date')
-        queryset = self.filter_queryset(queryset)
-
+        queryset = self.filter_queryset(self.queryset.all().order_by('-id'))
         tag_slugs = request.query_params.getlist('tags')
         author_id = request.query_params.get('author')
-        is_favorited = request.query_params.get('is_favorited')
 
         if author_id:
             queryset = queryset.filter(author__id=author_id)
-        if is_favorited:
-            queryset = queryset.filter(favorites=request.user)
         if tag_slugs:
             queryset = queryset.filter(tags__slug__in=tag_slugs)
 
@@ -272,6 +304,9 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для добавления рецепта в список покупок."""
         recipe = self.get_object()
         user = request.user
+        if user.shopping_cart.filter(id=recipe.id).exists():
+            return Response({'errors': 'Рецепт уже есть в списке покупок'},
+                            status=status.HTTP_400_BAD_REQUEST)
         user.shopping_cart.add(recipe)
         serializer = ShortRecipeSerializer(recipe)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -281,6 +316,9 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для удаления рецепта из списка покупок."""
         recipe = self.get_object()
         user = request.user
+        if not user.shopping_cart.filter(id=recipe.id).exists():
+            return Response({'errors': 'Рецепта нет в списке покупок'},
+                            status=status.HTTP_400_BAD_REQUEST)
         user.shopping_cart.remove(recipe)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -327,15 +365,21 @@ class ReciepesViewSet(viewsets.ModelViewSet):
         """Метод для добавления рецепта в избранное."""
         recipe = self.get_object()
         user = request.user
+        if user.favorites.filter(id=recipe.id).exists():
+            return Response({'errors': 'Рецепт уже есть в избранном'},
+                            status=status.HTTP_400_BAD_REQUEST)
         user.favorites.add(recipe)
         serializer = ShortRecipeSerializer(recipe)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['delete'])
     def remove_from_favorite(self, request, pk=None):
         """Метод для удаления рецепта из избранного."""
         recipe = self.get_object()
         user = request.user
+        if not user.favorites.filter(id=recipe.id).exists():
+            return Response({'errors': 'Рецепта нет в избранном'},
+                            status=status.HTTP_400_BAD_REQUEST)
         user.favorites.remove(recipe)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

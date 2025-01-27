@@ -15,6 +15,12 @@ class BaseUserSerializer(serializers.ModelSerializer):
 
     avatar = serializers.SerializerMethodField()
     is_subscribed = serializers.SerializerMethodField(default=False)
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[password_validation.validate_password],
+    )
+    email = serializers.EmailField(required=True)
 
     def get_avatar(self, obj):
         return self.context['request'].build_absolute_uri(
@@ -37,11 +43,53 @@ class BaseUserSerializer(serializers.ModelSerializer):
         return obj.recipes.count()
 
     class Meta:
+        """Meta."""
+
         model = MyUser
         fields = ('id', 'username', 'email', 'first_name', 'last_name',
                   'avatar', 'is_subscribed', 'password')
         read_only_fields = ('id',)
-        extra_kwargs = {"email": {"required": True}}
+
+
+class UserCreateSerializer(BaseUserSerializer, ValidateUsernameMixin):
+    """Сериализатор для создания пользователя."""
+
+    class Meta:
+        """Meta."""
+
+        model = MyUser
+        fields = ['email', 'username', 'first_name', 'last_name', 'password']
+        extra_kwargs = {
+            'email': {'required': True, 'allow_blank': False},
+            'username': {'required': True, 'allow_blank': False},
+            'first_name': {'required': True},
+            'last_name': {'required': True}
+        }
+
+    def validate(self, data):
+        """Проверка совпадения email и username."""
+        if MyUser.objects.filter(email=data.get('email')).exists():
+            raise ValidationError(
+                "Пользователь с таким email уже существует")
+        if MyUser.objects.filter(username=data.get('username')).exists():
+            raise ValidationError(
+                "Пользователь с таким username уже существует")
+        return data
+
+    def create(self, validated_data):
+        """Метод для создания нового пользователя."""
+        user = MyUser.objects.create(**validated_data)
+        return user
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """Сериализатор для вывода json ответа после регистрации."""
+
+    class Meta:
+        """Meta."""
+
+        model = MyUser
+        fields = ['email', 'id', 'username', 'first_name', 'last_name']
 
 
 class SetPasswordSerializer(serializers.Serializer):
@@ -58,27 +106,19 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(required=True)
 
 
-class UserSerializer(ValidateUsernameMixin, BaseUserSerializer):
-    """Позволяет пользователю взаимодействовать со своими данными."""
-
-    password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[password_validation.validate_password],
-    )
-    email = serializers.EmailField(required=True)
-
-    def create(self, validated_data):
-        """Метод для создания нового пользователя."""
-        user = MyUser.objects.create(**validated_data)
-        return user
-
-
-class SubscribedUserSerializer(UserSerializer):
+class SubscribedUserSerializer(BaseUserSerializer):
     """Сериализатор для вывода информации о подписках."""
 
     recipes = serializers.SerializerMethodField()
     recipes_count = serializers.SerializerMethodField()
+
+    def get_recipes(self, obj):
+        limit = self.context.get('recipes_limit')
+        recipes = obj.recipes.all()
+        if limit:
+            recipes = recipes[:int(limit)]
+        return ShortRecipeSerializer(
+            recipes, many=True, context=self.context).data
 
     class Meta:
         """Meta."""
@@ -141,12 +181,11 @@ class ShortRecipeSerializer(serializers.ModelSerializer):
 class RecipeIngredientSerializer(serializers.ModelSerializer):
     """Сериализатор вспомогательной модели рецепты-ингредиенты."""
 
-    id = serializers.CharField(source='ingredient.id', read_only=True)
+    id = serializers.IntegerField(source='ingredient.id', read_only=True)
     name = serializers.CharField(source='ingredient.name', read_only=True)
     measurement_unit = serializers.CharField(
         source='ingredient.measurement_unit', read_only=True)
-    amount = serializers.DecimalField(
-        max_digits=6, decimal_places=2, required=True)
+    amount = serializers.IntegerField(required=True)
 
     class Meta:
         """Meta."""
@@ -172,7 +211,8 @@ class RecipeSerializer(serializers.ModelSerializer):
     """Общий сериализатор для рецептов."""
 
     image = Base64Image(required=True)
-    author = UserSerializer(
+    text = serializers.CharField(read_only=True)
+    author = BaseUserSerializer(
         read_only=True, default=serializers.CurrentUserDefault())
     is_favorited = serializers.SerializerMethodField(default=False)
     is_in_shopping_cart = serializers.SerializerMethodField(default=False)
@@ -208,18 +248,49 @@ class RecipeSerializer(serializers.ModelSerializer):
             item).data for item in recipe_ingredients]
 
     def to_internal_value(self, data):
+        """Валидируются поля рецептов."""
         tags = data.get('tags')
         ingredients = data.get('ingredients')
+        text = data.get('text')
+        image = data.get('image')
+        name = data.get('name')
         internal_data = super().to_internal_value(data)
-        if tags:
-            for tag_id in tags:
-                try:
-                    Tags.objects.get(pk=tag_id)
-                except Tags.DoesNotExist:
-                    raise ValidationError(
-                        {'classes': ['Тег отсутствует.']},
-                        code='invalid',
-                    )
+
+        if not text:
+            raise ValidationError({'text': ['Добавьте описание рецепта']})
+        if not image:
+            raise ValidationError({'image': ['Отсутствует изображение']})
+        if not name:
+            raise ValidationError({'name': ['Отсутствует название']})
+
+        if not tags:
+            raise ValidationError(
+                {'tags': ['Необходимо указать тег(-и)']})
+        if len(tags) != len(set(tags)):
+            raise ValidationError(
+                {'tags': ['Теги не должны повторяться']})
+        for tag_id in tags:
+            try:
+                Tags.objects.get(pk=tag_id)
+            except Tags.DoesNotExist:
+                raise ValidationError({'tags': ['Тег отсутствует.']})
+
+        if not ingredients:
+            raise ValidationError(
+                {'ingredients': ['Ингредиенты должны быть указаны']})
+        id_ingredients = [ingredient['id'] for ingredient in ingredients]
+        if len(id_ingredients) != len(set(id_ingredients)):
+            raise ValidationError(
+                {'ingredients': ['Ингредиенты не должны повторяться']})
+        for ingredient_data in ingredients:
+            if not Ingredients.objects.filter(
+                    id=ingredient_data['id']).exists():
+                raise ValidationError(
+                    {'ingredients': ['Ингредиент не существует']})
+            if ingredient_data.get('amount', 0) < 1:
+                raise ValidationError(
+                    {'ingredients': ['Количество ингредиента должно быть> 1']})
+
         internal_data['tags'] = tags
         internal_data['ingredients'] = ingredients
         return internal_data

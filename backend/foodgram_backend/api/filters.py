@@ -7,7 +7,7 @@ from recipes.models import Ingredients
 class IngredientFilter(FilterSet):
     """Кастомный класс фильтрации ингредиентов."""
 
-    name = CharFilter(field_name='name', lookup_expr='icontains')
+    name = CharFilter(field_name='name', lookup_expr='startswith')
 
     class Meta:
         model = Ingredients

@@ -44,7 +44,7 @@ class Recipes(models.Model):
 
     name = models.CharField('Название', max_length=256, default='Рецепт')
     image = models.ImageField('Изображение')
-    text = models.TextField('Описание', blank=True)
+    text = models.TextField('Описание')
     cooking_time = models.PositiveIntegerField(
         'Время приготовления (мин.)', validators=[MinValueValidator(1)])
     tags = models.ManyToManyField('Tags', verbose_name='Тэг')
@@ -109,11 +109,9 @@ class RecipeIngredients(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Ингредиент'
     )
-    amount = models.DecimalField(
+    amount = models.PositiveIntegerField(
         'Количество',
-        max_digits=500,
-        decimal_places=2,
-        validators=[MinValueValidator(0.01)]
+        validators=[MinValueValidator(1)]
     )
 
     class Meta:
