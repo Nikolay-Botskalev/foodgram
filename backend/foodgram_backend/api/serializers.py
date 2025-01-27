@@ -287,7 +287,7 @@ class RecipeSerializer(serializers.ModelSerializer):
                     id=ingredient_data['id']).exists():
                 raise ValidationError(
                     {'ingredients': ['Ингредиент не существует']})
-            if ingredient_data.get('amount', 0) < 1:
+            if int(ingredient_data.get('amount', 0)) < 1:
                 raise ValidationError(
                     {'ingredients': ['Количество ингредиента должно быть> 1']})
 
