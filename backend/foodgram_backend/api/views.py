@@ -6,7 +6,7 @@ from api.serializers import (AvatarSerializer, BaseUserSerializer,
                              RecipeSerializer, SetPasswordSerializer,
                              ShortRecipeSerializer, SubscribedUserSerializer,
                              TagsSerializer, UserCreateSerializer,
-                             UserRegistrationSerializer,)
+                             UserRegistrationSerializer)
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
@@ -19,7 +19,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.pagination import (LimitOffsetPagination,)
+from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import (AllowAny, IsAuthenticated,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.response import Response
