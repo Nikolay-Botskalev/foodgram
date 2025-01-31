@@ -1,14 +1,17 @@
 import json
 
 from django.core.management.base import BaseCommand
+
 from recipes.models import Ingredients
+
+ROUTE = 'recipes/management/commands/ingredients.json'
 
 
 class Command(BaseCommand):
     """Команда на добавление ингредиентов в БД."""
 
     def handle(self, *args, **options):
-        file_path = 'recipes/management/commands/ingredients.json'
+        file_path = ROUTE
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -36,5 +39,5 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(
                     f'Пропущен ингредиент {ingredient_data}'))
             self.stdout.write(self.style.SUCCESS(
-                f'Загрузка завершена. Создано {created_count} записей, \
-                    обновлено {updated_count} записей.'))
+                f'Загрузка завершена. Создано {created_count} записей, '
+                f'обновлено {updated_count} записей.'))

@@ -2,10 +2,10 @@
 
 from django.contrib import admin
 
-from .models import Ingredients, MyUser, Recipes, Tags
+from .models import Ingredients, User, Recipe, Tags
 
 
-@admin.register(MyUser)
+@admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     """Класс для модели пользователей."""
 
@@ -22,7 +22,7 @@ class IngredientsAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
-@admin.register(Recipes)
+@admin.register(Recipe)
 class RecipesAdmin(admin.ModelAdmin):
     """Класс для модели рецептов."""
 

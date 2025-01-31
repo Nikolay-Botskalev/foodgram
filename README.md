@@ -23,7 +23,6 @@
 *   **Python:**
 *   **Django:** 
 *   **PostgreSQL:**
-*   **HTML, CSS, JS:**
 *   **GitHub Actions:**
 
 ## Локальный запуск проекта
@@ -92,7 +91,14 @@
     docker compose -f docker-compose.production.yml exec backend cp -r /app/collected_static/. /backend_static/static/ 
     ```
 
-5. Остановка и удаление контейнеров
+5. Загрузка ингредиентов
+    Для загрузки ингредиентов в БД имеется файл ingredients.json
+    Для запуска загрузки в директории (в контейнере бэкенда) с файлом manage.py выаолнить команду:
+    ```
+    python manage.py load_ingredients.py.
+    ```
+
+6. Остановка и удаление контейнеров
     Для остановки контейнеров выполнить команду:
     ```
     docker compose -f docker-compose.production.yml stop
@@ -117,5 +123,6 @@
     PRODUCTION = <True/False> # Для локальной отладки - False
     ```
 
-## Автор
-    https://github.com/Nikolay-Botskalev
+## [Развернутый проект](https://foodgramyp.zapto.org/recipes)
+
+## [Автор](https://github.com/Nikolay-Botskalev)

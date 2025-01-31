@@ -5,11 +5,28 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 class IsAuthorOrReadOnly(BasePermission):
     """
-    Кастомное ограничение. Если запрос от владельца - полный доступ.
-    Иначе - только безопасные методы.
+    Ограничение, представляющее доступ только автору.
+
+    Остальным пользователям доступны только безопасные методы.
+
+    Методы
+    ------
+    has_object_permission(self, request, view, obj):
+        Проверяет права пользователя на выполнение запроса.
     """
 
     def has_object_permission(self, request, view, obj):
-        if request.method in SAFE_METHODS:
-            return True
-        return obj.author == request.user
+        """
+        Проверяет, имеет ли пользователь право на выполнение запроса.
+
+        Параметры
+        ------
+        request (Request): Запрос от клиента.
+        view (View): Представление, обрабатывающее запрос.
+        obj: Объект, к которому запрашивается доступ.
+
+        Возвращаемое значение:
+        bool: True, если запрос метод безопасный или пользователь - автор.
+            False в противном случае.
+        """
+        return request.method in SAFE_METHODS or obj.author == request.user

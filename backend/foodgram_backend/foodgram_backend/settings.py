@@ -62,7 +62,6 @@ PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
 # PRODUCTION = False  # на время отработки
 
 if not PRODUCTION:
-    BASE_URL = '127.0.0.1'
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -70,7 +69,6 @@ if not PRODUCTION:
         }
     }
 else:
-    BASE_URL = 'foodgramyp.zapto.org'
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -97,7 +95,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-RU'
 
 TIME_ZONE = 'UTC'
 
@@ -112,7 +110,7 @@ STATIC_ROOT = BASE_DIR / 'collected_static'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-AUTH_USER_MODEL = "recipes.MyUser"
+AUTH_USER_MODEL = "recipes.User"
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
