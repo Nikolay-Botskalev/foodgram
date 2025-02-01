@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import Ingredients, User, Recipe, Tags
+from .models import Ingredient, User, Recipe, Tag
 
 
 @admin.register(User)
@@ -13,7 +13,7 @@ class UserAdmin(admin.ModelAdmin):
     search_fields = ('username', 'email')
 
 
-@admin.register(Ingredients)
+@admin.register(Ingredient)
 class IngredientsAdmin(admin.ModelAdmin):
     """Класс для модели ингредиентов."""
 
@@ -36,7 +36,7 @@ class RecipesAdmin(admin.ModelAdmin):
         return obj.favorites.count()
 
 
-@admin.register(Tags)
+@admin.register(Tag)
 class TagsAdmin(admin.ModelAdmin):
     """Класс для модели тегов."""
 

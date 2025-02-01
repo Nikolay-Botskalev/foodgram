@@ -58,8 +58,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'foodgram_backend.wsgi.application'
 
-PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
-# PRODUCTION = False  # на время отработки
+# PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
+PRODUCTION = False  # на время отработки
 
 if not PRODUCTION:
     DATABASES = {

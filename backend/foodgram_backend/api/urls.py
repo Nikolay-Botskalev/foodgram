@@ -23,5 +23,5 @@ urlpatterns = [
 
     path('', include(router.urls)),
 
-    path('<str:string>', short_link_redirect, name='short_link_redirect')
+    path('<str:short_code>', short_link_redirect, name='short_link_redirect')
 ]

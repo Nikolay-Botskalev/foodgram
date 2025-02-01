@@ -1,8 +1,8 @@
 """Фильтрация."""
 
-from django_filters import (AllValuesMultipleFilter, CharFilter, FilterSet,
-                            NumberFilter)
-from recipes.models import Ingredients, Recipe
+from django_filters import (AllValuesMultipleFilter, CharFilter, FilterSet)
+
+from recipes.models import Ingredient, Recipe
 
 
 class IngredientFilter(FilterSet):
@@ -11,7 +11,7 @@ class IngredientFilter(FilterSet):
     name = CharFilter(field_name='name', lookup_expr='startswith')
 
     class Meta:
-        model = Ingredients
+        model = Ingredient
         fields = ['name']
 
 
@@ -19,7 +19,6 @@ class RecipeFilter(FilterSet):
     """Фильтр для рецептов."""
 
     tags = AllValuesMultipleFilter(field_name='tags__slug')
-    author = NumberFilter(field_name='author__id')
     is_in_shopping_cart = CharFilter(method='filter_is_in_shopping_cart')
     is_favorited = CharFilter(method='filter_is_favorited')
 
