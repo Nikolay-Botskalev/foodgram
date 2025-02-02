@@ -286,10 +286,10 @@ class ReciepesViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK)
 
 
-def short_link_redirect(request, string):
+def short_link_redirect(request, short_code):
     """Метод для редиректа с короткой ссылки."""
     try:
-        recipe_id = hashids.decode(string)[0]
+        recipe_id = hashids.decode(short_code)[0]
         if not recipe_id:
             return Response(status=status.HTTP_404_NOT_FOUND)
         recipe = get_object_or_404(Recipe, pk=recipe_id)
