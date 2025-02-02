@@ -60,7 +60,6 @@ WSGI_APPLICATION = 'foodgram_backend.wsgi.application'
 
 PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
 
-
 if not PRODUCTION:
     DATABASES = {
         'default': {

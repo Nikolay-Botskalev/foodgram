@@ -21,6 +21,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from api.constants import MIN_LENGTH_HASH_CODE
 from api.filters import IngredientFilter, RecipeFilter
+from api.paginators import RecipePagination
 from api.permissions import IsAuthorOrReadOnly
 from api.serializers import (AvatarSerializer, BaseUserSerializer,
                              FavoriteSerializer, IngredientsSerializer,
@@ -206,7 +207,7 @@ class ReciepesViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all().order_by('-pub_date')
     serializer_class = RecipeSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
-    pagination_class = LimitOffsetPagination
+    pagination_class = RecipePagination
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_class = RecipeFilter
     http_method_names = ('get', 'post', 'patch', 'delete')

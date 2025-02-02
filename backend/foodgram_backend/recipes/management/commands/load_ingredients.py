@@ -2,7 +2,7 @@ import json
 
 from django.core.management.base import BaseCommand
 
-from recipes.models import Ingredients
+from recipes.models import Ingredient
 
 ROUTE = 'recipes/management/commands/ingredients.json'
 
@@ -27,7 +27,7 @@ class Command(BaseCommand):
             name = ingredient_data.get('name')
             measurement_unit = ingredient_data.get('measurement_unit')
             if name and measurement_unit:
-                ingredient, created = Ingredients.objects.get_or_create(
+                ingredient, created = Ingredient.objects.get_or_create(
                     name=name, defaults={'measurement_unit': measurement_unit})
                 if created:
                     created_count += 1
