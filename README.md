@@ -123,6 +123,4 @@
     PRODUCTION = <True/False> # Для локальной отладки - False
     ```
 
-## [Развернутый проект](https://foodgramyp.zapto.org/recipes)
-
 ## [Автор](https://github.com/Nikolay-Botskalev)
